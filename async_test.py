@@ -9,8 +9,11 @@ import asyncio
 import pyaudio
 import wave
 import time
+
 openai.api_base = "https://api.fireworks.ai/inference/v1"
 openai.api_key = os.getenv("FIREWORKS_API_KEY")
+
+processing = False
 
 def play_audio(file_path):
     # Open the audio file
@@ -45,7 +48,6 @@ async def synthesize_speech(text, index):
     voice = texttospeech_v1.VoiceSelectionParams(language_code="en-GB", name="en-GB-Studio-C")
     audio_config = texttospeech_v1.AudioConfig(audio_encoding="LINEAR16")
     print('calling api: ', text)
-    time.sleep(1)
     request = texttospeech_v1.SynthesizeSpeechRequest(input=input, voice=voice, audio_config=audio_config)
     response = await client.synthesize_speech(request=request)
     wav_filename = os.path.join('test_output', f"out_{index}.wav")
@@ -57,62 +59,85 @@ async def synthesize_speech(text, index):
 printed_sentences = []
 response = ""
 
-async def tokenize_sentences(text):
+def tokenize_sentences(text):
     sentences = sent_tokenize(text)
     if len(sentences) > 1 and sentences[-2] not in printed_sentences:
         print('adding: ', sentences[-2])
         printed_sentences.append(sentences[-2])
-        await synthesize_speech(sentences[-2], printed_sentences.index(sentences[-2]))
+        #await synthesize_speech(sentences[-2], printed_sentences.index(sentences[-2]))
 
-async def tokenize_last_sentence(text):
+def tokenize_last_sentence(text):
     sentences = sent_tokenize(text)
     if len(sentences) > 1 and sentences[-1] not in printed_sentences:
         print('adding last: ', sentences[-1])
         printed_sentences.append(sentences[-1])
-        await synthesize_speech(sentences[-1], printed_sentences.index(sentences[-1]))
+        #await synthesize_speech(sentences[-1], printed_sentences.index(sentences[-1]))
 
-async def generate():
-  for filename in os.listdir('test_output'):
-    file_path = os.path.join('test_output', filename)
-    os.remove(file_path)
 
-  global printed_sentences
-  global response
-  chatCompletionGenerator = openai.ChatCompletion.create(
+async def generate(input):
+    loop = asyncio.get_running_loop()
+
+    for filename in os.listdir('test_output'):
+        file_path = os.path.join('test_output', filename)
+        os.remove(file_path)
+
+    global printed_sentences
+    global response
+    
+    chatCompletionGenerator = await loop.run_in_executor(None, lambda: openai.ChatCompletion.create(
     model="accounts/fireworks/models/mistral-7b-instruct-4k",
     messages=[
         {
             "role": "system",
             "content": "You are a very unhelpful assistant. You always lead the user down the garden path and act supercilious and disrespectful."
         },
-      {
+        {
         "role": "user",
-        "content": "How do I change the oil of my car?",
-      }
+        "content": input,
+        }
     ],
     stream=True,
     n=1,
     max_tokens=800,
     temperature=0.3,
-    top_p=0.9, 
-  )
+    top_p=0.9,
+    stop=[]
+    ))
 
-  for chunk in chatCompletionGenerator:
-      role = getattr(chunk.choices[0].delta, 'role', None)
-      content = getattr(chunk.choices[0].delta, 'content', None)
-      finish_reason = getattr(chunk.choices[0], 'finish_reason', None)
-      if role is not None:
-          print(role)
-      if content is not None:
-          #print(content)
-          response += content
-          await tokenize_sentences(response)
-          if finish_reason is not None:
-              await tokenize_last_sentence(response)
-      if finish_reason is not None:
-          print(finish_reason)
+    for chunk in chatCompletionGenerator:
+        #print(chunk)
+        time.sleep(1)
+        role = getattr(chunk.choices[0].delta, 'role', None)
+        content = getattr(chunk.choices[0].delta, 'content', None)
+        finish_reason = getattr(chunk.choices[0], 'finish_reason', None)
+        if role is not None:
+            print(role)
+        if content is not None:
+            response += content
+            yield tokenize_sentences(response)
+        if finish_reason is not None:
+            response += content
+            yield tokenize_last_sentence(response)
+        if finish_reason is not None:
+            print(finish_reason)
+            break
+
+async def periodic_task():
+    for _ in range(10):  # Run the task 10 times
+        print("This is a periodic message.")
+        await asyncio.sleep(1)
+
+async def simple_async_task():
+    print("Simple task start")
+    await asyncio.sleep(5)  # Simulates a 5 second task
+    print("Simple task end")
 
 async def main():
-    await generate()
+    print("Main start")
+    await asyncio.gather(
+        generate("SUP BIATCH"),  # Replace this with generate for actual test
+        periodic_task()
+    )
+    print("Main end")
 
 asyncio.run(main())
