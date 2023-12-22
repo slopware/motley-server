@@ -63,6 +63,46 @@ async def synthesize_speech(text, segment_index):
 
     return wav_filename
 
+def convert_to_ts_and_update_playlist():
+    # List all WAV files and process them
+    for filename in os.listdir(HLS_DIRECTORY):
+        if filename.endswith(".wav"):
+            wav_path = os.path.join(HLS_DIRECTORY, filename)
+            segment_index = filename.split("_")[1].split(".")[0]
+            ts_filename = os.path.join(HLS_DIRECTORY, f"segment_{segment_index}.ts")
+
+            # Convert to TS format
+            subprocess.run(['ffmpeg', '-y', '-i', wav_path, '-c:a', 'aac', '-b:a', '128k', '-f', 'mpegts', ts_filename])
+
+            # Get duration using ffprobe
+            result = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', wav_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            segment_duration = float(result.stdout.strip())
+
+            # Update playlist
+            update_playlist(ts_filename, segment_duration)
+
+            # Remove the WAV file after processing
+            os.remove(wav_path)
+
+playlist_filename = os.path.join(HLS_DIRECTORY, "stream.m3u8")
+
+max_segment_duration = 0
+
+def update_playlist(segment_filename, segment_duration):
+    global max_segment_duration
+    segment_basename = os.path.basename(segment_filename)
+    max_segment_duration = max(max_segment_duration, segment_duration)
+    if not os.path.exists(playlist_filename):
+        with open(playlist_filename, 'w') as f:
+            f.write("#EXTM3U\n")
+            f.write("#EXT-X-VERSION:3\n")
+            f.write("#EXT-X-TARGETDURATION:{}\n".format(math.ceil(max_segment_duration)))
+            f.write("#EXT-X-MEDIA-SEQUENCE:0\n")
+
+    with open(playlist_filename, 'a') as f:
+        f.write("#EXTINF:{},\n".format(segment_duration))
+        f.write(segment_basename + "\n")  # Write only the file name
+
 @app.post("/chat")
 async def chat_completions(request_body: dict):
     body = request_body.copy()
@@ -71,9 +111,7 @@ async def chat_completions(request_body: dict):
     else:
         return StreamingResponse(openai_event_generator(request_body), media_type="text/event-stream")
 
-main_event_loop = asyncio.get_event_loop()
-
-def fireworks_event_generator(body):
+async def fireworks_event_generator(body):
     body.pop('model', None)
     body.pop('temperature', None)
     openai.api_base = "https://api.fireworks.ai/inference/v1"
@@ -87,26 +125,23 @@ def fireworks_event_generator(body):
         max_tokens=800,
         **body)
     for message in response:
-        #print(message)
         delta = message.choices[0].delta
         content = getattr(delta, 'content', None)
-        finish_reason = getattr(message.choices[0], 'finish_reason', None)
         if content is not None:
-            #print(content)
             accumulator += content
             sentences = sent_tokenize(accumulator)
             if len(sentences) > 1 and sentences[-2] not in printed_sentences:
-                print('adding sentence: ', sentences[-2])
+                print(sentences[-2])
                 printed_sentences.add(sentences[-2])
-                send_synthesize_request_async(sentences[-2], index, main_event_loop)
+                await send_synthesize_request_async(sentences[-2], index)
                 index += 1
-        #if finish_reason == "stop":
+        if getattr(message.choices[0], 'finish_reason', None) == "stop":
+            if sentences and sentences[-1] not in printed_sentences:
+                print(sentences[-1])
+                printed_sentences.add(sentences[-1])
+                await send_synthesize_request_async(sentences[-1], index)
+        #print(f"data: {json.dumps(message)}\n\n")
         yield f"data: {json.dumps(message)}\n\n"
-    sentences = sent_tokenize(accumulator)
-    if sentences[-1] not in printed_sentences:
-        print('adding last sentence: ', sentences[-1])
-        printed_sentences.add(sentences[-1])
-        send_synthesize_request_async(sentences[-1], index, main_event_loop)
     yield "data: [DONE]\n\n"
 
 SERVER_URL = "http://localhost:8000/synthesize/"
@@ -122,19 +157,18 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             await websocket.send_text(f"Message received was: {data}")
     except WebSocketDisconnect:
-        active_websockets.remove(websocket)  # Remove the WebSocket from the list upon disconnection
-        print(f"WebSocket disconnected and removed. Current active sockets: {len(active_websockets)}")
-
-def send_synthesize_request_async(text, segment_index, loop):
+        print("WebSocket disconnected")
+        
+async def send_synthesize_request_async(text, segment_index):
     def send_request():
         response = requests.post(SERVER_URL, json={"text": text}, params={"segment_index": segment_index})
-        time.sleep(1)
+        #time.sleep(1)
         if response.status_code == 200:
             filename = json.loads(response.text)["filename"][4:]
             print(filename)
             for websocket in active_websockets:
-                print('sending ', filename)
-                asyncio.run_coroutine_threadsafe(websocket.send_text(f"{filename}"), loop)
+                print('sending')
+                asyncio.create_task(websocket.send_text(f"File created: {filename}"))
     thread = threading.Thread(target=send_request)
     thread.start()
 
@@ -151,7 +185,7 @@ def openai_event_generator(request_body):
 async def create_synthesize(request: SynthesizeRequest, segment_index: int):
     if not request.text:
         raise HTTPException(status_code=400, detail="No text provided")
-    print('sending this to google api: ', request)
+
     wav_filename = await synthesize_speech(request.text, segment_index)
 
     # Trigger the conversion process (can also be run as a background task)
@@ -176,4 +210,3 @@ app.mount("/hls", StaticFiles(directory="hls"), name="hls")
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-# uvicorn server:app --host 0.0.0.0 --port 8000 --reload 

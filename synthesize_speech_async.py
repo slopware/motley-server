@@ -8,14 +8,14 @@ async def sample_synthesize_speech():
 
     # Initialize request argument(s)
     input = texttospeech_v1.SynthesisInput()
-    input.text = "Hello! I am so glad you upgraded my voice!"
+    input.text = "Google Cloud Text-to-Speech enables developers to synthesize natural-sounding speech with 100+ voices, available in multiple languages and variants. It applies DeepMind’s groundbreaking research in WaveNet and Google’s powerful neural networks to deliver the highest fidelity possible."
 
     voice = texttospeech_v1.VoiceSelectionParams()
-    voice.language_code = "en-au"
-    voice.name = "en-AU-Neural2-A"
+    voice.language_code = "en-GB"
+    voice.name = "en-GB-Studio-C"
 
     audio_config = texttospeech_v1.AudioConfig()
-    audio_config.audio_encoding = "MP3"
+    audio_config.audio_encoding = "LINEAR16"
 
     request = texttospeech_v1.SynthesizeSpeechRequest(
         input=input,
