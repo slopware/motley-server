@@ -30,7 +30,7 @@ def play_audio(file_path):
     # Read data in chunks
     chunk_size = 1024
     data = wf.readframes(chunk_size)
-
+    print('playing audio: ', file_path)
     # Play the audio
     while data != b'':
         stream.write(data)
@@ -51,10 +51,10 @@ async def synthesize_speech(text, index):
     request = texttospeech_v1.SynthesizeSpeechRequest(input=input, voice=voice, audio_config=audio_config)
     response = await client.synthesize_speech(request=request)
     wav_filename = os.path.join('test_output', f"out_{index}.wav")
-    print('saving ', wav_filename)
+    print('saving ', text, ' as ', wav_filename)
     with open(wav_filename, "wb") as audio_file:
         audio_file.write(response.audio_content)
-    play_audio(wav_filename)
+    #play_audio(wav_filename)
 
 printed_sentences = []
 response = ""
@@ -62,20 +62,19 @@ response = ""
 def tokenize_sentences(text):
     sentences = sent_tokenize(text)
     if len(sentences) > 1 and sentences[-2] not in printed_sentences:
-        print('adding: ', sentences[-2])
         printed_sentences.append(sentences[-2])
-        #await synthesize_speech(sentences[-2], printed_sentences.index(sentences[-2]))
+        print('adding: ', printed_sentences.index(sentences[-2]), ': ', sentences[-2])
+        #task = asyncio.create_task(synthesize_speech(sentences[-2], printed_sentences.index(sentences[-2])))
 
 def tokenize_last_sentence(text):
     sentences = sent_tokenize(text)
     if len(sentences) > 1 and sentences[-1] not in printed_sentences:
         print('adding last: ', sentences[-1])
         printed_sentences.append(sentences[-1])
-        #await synthesize_speech(sentences[-1], printed_sentences.index(sentences[-1]))
+        #task = asyncio.create_task(synthesize_speech(sentences[-1], printed_sentences.index(sentences[-1])))
 
-
-async def generate(input):
-    loop = asyncio.get_running_loop()
+def generate(input):
+    global processing
 
     for filename in os.listdir('test_output'):
         file_path = os.path.join('test_output', filename)
@@ -83,8 +82,8 @@ async def generate(input):
 
     global printed_sentences
     global response
-    
-    chatCompletionGenerator = await loop.run_in_executor(None, lambda: openai.ChatCompletion.create(
+    processing = True
+    chatCompletionGenerator = openai.ChatCompletion.create(
     model="accounts/fireworks/models/mistral-7b-instruct-4k",
     messages=[
         {
@@ -102,11 +101,9 @@ async def generate(input):
     temperature=0.3,
     top_p=0.9,
     stop=[]
-    ))
+    )
 
     for chunk in chatCompletionGenerator:
-        #print(chunk)
-        time.sleep(1)
         role = getattr(chunk.choices[0].delta, 'role', None)
         content = getattr(chunk.choices[0].delta, 'content', None)
         finish_reason = getattr(chunk.choices[0], 'finish_reason', None)
@@ -115,29 +112,21 @@ async def generate(input):
         if content is not None:
             response += content
             yield tokenize_sentences(response)
-        if finish_reason is not None:
-            response += content
-            yield tokenize_last_sentence(response)
-        if finish_reason is not None:
-            print(finish_reason)
-            break
+    tokenize_last_sentence(response)
+    processing = False
 
 async def periodic_task():
     for _ in range(10):  # Run the task 10 times
-        print("This is a periodic message.")
+        print(processing)
         await asyncio.sleep(1)
-
-async def simple_async_task():
-    print("Simple task start")
-    await asyncio.sleep(5)  # Simulates a 5 second task
-    print("Simple task end")
 
 async def main():
     print("Main start")
-    await asyncio.gather(
-        generate("SUP BIATCH"),  # Replace this with generate for actual test
-        periodic_task()
-    )
-    print("Main end")
+    #task = asyncio.create_task(generate("Tell me a story."))
+    #await task
+    task = asyncio.create_task(generate("Tell me a story."))
+    await periodic_task()
+    print("Main end.")
+
 
 asyncio.run(main())
