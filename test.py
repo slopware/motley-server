@@ -43,7 +43,6 @@ def play_audio(file_path):
 
 async def synthesize_speech(text, index):
     client = texttospeech_v1.TextToSpeechAsyncClient()
-
     input = texttospeech_v1.SynthesisInput(text=text)
     voice = texttospeech_v1.VoiceSelectionParams(language_code="en-GB", name="en-GB-Studio-C")
     audio_config = texttospeech_v1.AudioConfig(audio_encoding="LINEAR16")
@@ -69,7 +68,7 @@ def tokenize_sentences(text):
 def tokenize_last_sentence(text):
     sentences = sent_tokenize(text)
     if len(sentences) > 1 and sentences[-1] not in printed_sentences:
-        print('adding last: ', sentences[-1])
+        print('adding last: ', printed_sentences.index(sentences[-2]), ': ', sentences[-1])
         printed_sentences.append(sentences[-1])
         #task = asyncio.create_task(synthesize_speech(sentences[-1], printed_sentences.index(sentences[-1])))
 
@@ -88,7 +87,7 @@ def generate(input):
     messages=[
         {
             "role": "system",
-            "content": "You are a very unhelpful assistant. You always lead the user down the garden path and act supercilious and disrespectful."
+            "content": "You are an AI Jerry Seinfeld."
         },
         {
         "role": "user",
@@ -116,17 +115,25 @@ def generate(input):
     processing = False
 
 async def periodic_task():
-    for _ in range(10):  # Run the task 10 times
-        print(processing)
-        await asyncio.sleep(1)
+    index = 0
+    while True:
+        if len(printed_sentences) > 0:
+            #print(f'before reading: {printed_sentences}')
+            await synthesize_speech(printed_sentences[0], index)
+            printed_sentences.pop(0)
+            index += 1
+            #print(f'after reading: {printed_sentences}')
+        if len(printed_sentences) == 0:
+            await asyncio.sleep(1)
+            if len(printed_sentences) == 0:
+                break
 
 async def main():
     print("Main start")
-    #task = asyncio.create_task(generate("Tell me a story."))
-    #await task
     task = asyncio.create_task(generate("Tell me a story."))
     await periodic_task()
     print("Main end.")
 
 
 asyncio.run(main())
+#try using decorators
