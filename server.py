@@ -44,8 +44,6 @@ HLS_DIRECTORY = "hls"
 if not os.path.exists(HLS_DIRECTORY):
     os.makedirs(HLS_DIRECTORY)
 
-
-
 async def synthesize_speech(text, segment_index):
     client = texttospeech_v1.TextToSpeechAsyncClient()
 

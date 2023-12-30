@@ -68,7 +68,7 @@ def tokenize_sentences(text):
 def tokenize_last_sentence(text):
     sentences = sent_tokenize(text)
     if len(sentences) > 1 and sentences[-1] not in printed_sentences:
-        print('adding last: ', printed_sentences.index(sentences[-2]), ': ', sentences[-1])
+        print('adding last: ', printed_sentences.index(sentences[-1]), ': ', sentences[-1])
         printed_sentences.append(sentences[-1])
         #task = asyncio.create_task(synthesize_speech(sentences[-1], printed_sentences.index(sentences[-1])))
 
