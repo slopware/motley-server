@@ -3,26 +3,34 @@ from openai import AsyncOpenAI
 from nltk.tokenize import sent_tokenize
 import json
 import requests
+import httpx
+
 client = AsyncOpenAI()
 
 generating = False
-messages = [{"role": "system", "content": "You are an unhelpful and sarcastic assistant."}]
+messages = [{"role": "system", "content": "You are a terse and sarcastic assistant."}]
 printed_sentences = []
 response = ""
 i = 0
 
-async def tokenize_sentences(text):
-
+async def xtts_api_server_request(text):
     url = 'http://localhost:8020/tts_to_audio/'
     headers = {
         'accept': 'application/json',
         'Content-Type': 'application/json'
     }
     data = {
-        #"text": "Let the whole world know you as you really are.",
+        "text": text,
         "speaker_wav": "isa_sample.wav",
         "language": "en"
     }
+    print(f"requesting: {text}")
+    async with httpx.AsyncClient(timeout=1000) as client:
+        req = asyncio.create_task(client.post(url, headers=headers, json=data))
+        await req
+    #asyncio.create_task(requests.post(url, headers=headers, json=data))
+
+async def tokenize_sentences(text):
     global printed_sentences
     global response
     global i
@@ -32,21 +40,24 @@ async def tokenize_sentences(text):
     if len(sentences) > 1 and sentences[-2] not in printed_sentences:
         printed_sentences.append(sentences[-2])
         print(f"adding sentence {printed_sentences.index(sentences[-2])}: {sentences[-2]}")
-        data["text"] = sentences[-2]
-        requests.post(url, headers=headers, json=data)
+        asyncio.create_task(xtts_api_server_request(sentences[-2]))
     if text == "" and len(sentences) > 1:
         printed_sentences.append(sentences[-1])
         print(f"adding (last) sentence {printed_sentences.index(sentences[-1])}: {sentences[-1]}")
         print(f"finished: {printed_sentences}")
-        data["text"] = sentences[-1]
-        requests.post(url, headers=headers, json=data)
+        printed_sentences.clear()
+        response = ""
+        task = asyncio.create_task(xtts_api_server_request(sentences[-1]))
+        await task
     if text == "" and len(sentences) == 1:
         printed_sentences.append(sentences[-1])
         print(f"adding (only) sentence {printed_sentences.index(sentences[-1])}: {sentences[-1]}")
         print(f"finished: {printed_sentences}")
-        data["text"] = sentences[-1]
-        requests.post(url, headers=headers, json=data)
-
+        response = ""
+        printed_sentences.clear()
+        task = asyncio.create_task(xtts_api_server_request(sentences[-1]))
+        await task
+        
 async def generate(input):
     global messages
     global generating
@@ -67,8 +78,9 @@ async def generate(input):
     print(f"stream finished\nmessages: {messages}")
     
 async def main():
-    generation = asyncio.create_task(generate("hello"))
-    await generation
+    while True:
+        generation = asyncio.create_task(generate(input()))
+        await generation
 
 asyncio.run(main())
 # python -m xtts_api_server --deepspeed --speaker-folder speakers --model-folder xtts_models --streaming-mode --stream-play-sync
