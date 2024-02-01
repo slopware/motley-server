@@ -1,7 +1,7 @@
 import nltk
 from nltk.tokenize import sent_tokenize
 import fireworks.client
-import openai
+from openai import AsyncOpenAI
 import os
 import json
 from google.cloud import texttospeech_v1
@@ -10,8 +10,10 @@ import pyaudio
 import wave
 import time
 
-openai.api_base = "https://api.fireworks.ai/inference/v1"
-openai.api_key = os.getenv("FIREWORKS_API_KEY")
+client = AsyncOpenAI(
+    api_key=os.getenv("FIREWORKS_API_KEY"),
+    api_base="https://api.fireworks.ai/inference/v1"
+)
 
 processing = False
 

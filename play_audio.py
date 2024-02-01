@@ -27,5 +27,3 @@ def play_audio(file_path):
     stream.close()
     p.terminate()
 
-# Replace 'path_to_your_audio_file.wav' with the path to your audio file
-play_audio('test_output.mp3')
