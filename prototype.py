@@ -66,7 +66,7 @@ async def generate(input):
     generating = True
     resp = ""
     stream = await client.chat.completions.create(
-        model="gpt-4-1106-preview",
+        model="gpt-4-turbo-preview",
         messages=messages,
         stream=True,
     )
