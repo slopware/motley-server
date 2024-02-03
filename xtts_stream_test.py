@@ -2,6 +2,7 @@ import os
 import time
 import torch
 import torchaudio
+import sounddevice as sd
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
 
@@ -24,11 +25,14 @@ chunks = model.inference_stream(
     speaker_embedding
 )
 
-wav_chuncks = []
+wav_chunks = []
 for i, chunk in enumerate(chunks):
     if i == 0:
         print(f"Time to first chunck: {time.time() - t0}")
     print(f"Received chunk {i} of audio length {chunk.shape[-1]}")
-    wav_chuncks.append(chunk)
-wav = torch.cat(wav_chuncks, dim=0)
+    audio_numpy = chunk.cpu().numpy().astype("float32")
+    sd.play(audio_numpy, 24000)
+    sd.wait()
+    wav_chunks.append(chunk)
+wav = torch.cat(wav_chunks, dim=0)
 torchaudio.save("xtts_streaming.wav", wav.squeeze().unsqueeze(0).cpu(), 24000)
