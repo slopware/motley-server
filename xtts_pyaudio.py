@@ -5,6 +5,7 @@ import torch
 import torchaudio
 import queue
 import pyaudio
+import threading
 
 import numpy as np
 
@@ -61,16 +62,20 @@ stream = p.open(format=pyaudio.paFloat32,  # This should match the dtype of `chu
                 output=True)
 
 def play_audio(buffer):
-    while not buffer.empty():
-        chunk = buffer.get()
-        stream.write(chunk.tobytes())  # Write the audio data to the stream
+    while True:
+        chunk = buffer.get()  # Use await with asyncio.Queue
+        if chunk is None:  # Use None as a signal to stop playback
+            break
+        stream.write(chunk.tobytes(), exception_on_underflow=False)
+        buffer.task_done()
 
-tts_stream(buffer, "This is a test. I am synthesizing audio.", sub_chunk_size=1024)
+
+producer_thread = threading.Thread(target=tts_stream, args=(buffer, "This is a test. I am synthesizing audio.", 1024))
+producer_thread.start()
 
 play_audio(buffer)
-
+# Cleanup
 stream.stop_stream()
 stream.close()
-
 p.terminate()
-
+producer_thread.join()
