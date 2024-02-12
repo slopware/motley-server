@@ -14,6 +14,7 @@ response = ""
 i = 0
 
 async def xtts_api_server_request(text):
+    """run with xtts-api-server"""
     url = 'http://localhost:8020/tts_to_audio/'
     headers = {
         'accept': 'application/json',

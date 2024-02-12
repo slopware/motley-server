@@ -8,17 +8,6 @@ from typing import Iterator
 
 import requests
 
-# def is_installed(lib_name: str) -> bool:
-#     lib = shutil.which(lib_name)
-#     if lib is None:
-#         return False
-#     return True
-
-
-# def save(audio: bytes, filename: str) -> None:
-#     with open(filename, "wb") as f:
-#         f.write(audio)
-
 
 def stream_ffplay(audio_stream):
 
