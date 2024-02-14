@@ -23,7 +23,7 @@ model.cuda()
 print("Computing speaker latents...")
 gpt_cond_latent, speaker_embedding = model.get_conditioning_latents(audio_path=["isa_sample.wav"])
 
-buffer = queue.Queue(maxsize=2000)
+buffer = queue.Queue()
 
 def postprocess_wave(chunk):
     """Post process the output waveform"""
@@ -54,8 +54,6 @@ def tts_stream(buffer, text, sub_chunk_size):
 
 p = pyaudio.PyAudio()
 
-
-# Open a stream with the appropriate format
 stream = p.open(format=pyaudio.paFloat32,  # This should match the dtype of `chunk` (np.float32)
                 channels=1,  # Mono audio
                 rate=24000,  # This should match the sample rate of your model's output
@@ -63,19 +61,23 @@ stream = p.open(format=pyaudio.paFloat32,  # This should match the dtype of `chu
 
 def play_audio(buffer):
     while True:
-        chunk = buffer.get()  # Use await with asyncio.Queue
-        if chunk is None:  # Use None as a signal to stop playback
+        chunk = buffer.get()
+        if chunk is None:
             break
         stream.write(chunk.tobytes(), exception_on_underflow=False)
         buffer.task_done()
 
 
-producer_thread = threading.Thread(target=tts_stream, args=(buffer, "This is a test. I am synthesizing audio.", 1024))
-producer_thread.start()
+synthesis = threading.Thread(target=tts_stream, args=(buffer, "This is a test. I am synthesizing audio.", 1024))
+audio_player = threading.Thread(target=play_audio, args=(buffer,))
 
-play_audio(buffer)
-# Cleanup
+synthesis.start()
+audio_player.start()
+
+synthesis.join()
+#since queue.get() is blocking,
+buffer.put(None)
+audio_player.join()
+
 stream.stop_stream()
 stream.close()
-p.terminate()
-producer_thread.join()
