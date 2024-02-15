@@ -12,6 +12,7 @@ import numpy as np
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
 from TTS.config import load_config
+
 class XttsEngine:
     def __init__(self):
         self.config = XttsConfig()
@@ -20,7 +21,7 @@ class XttsEngine:
         self.model = Xtts.init_from_config(self.config)
         self.model.load_checkpoint(self.config, checkpoint_dir="xtts_models/v2.0.2/", use_deepspeed=True, eval=True)
         self.model.cuda()
-        self.gpt_cond_latent, self.speaker_embedding = self.model.get_conditioning_latents(audio_path=["isa_sample.wav"])
+        self.gpt_cond_latent, self.speaker_embedding = self.model.get_conditioning_latents(audio_path=["isa_denoised.wav"])
         self.audio_buffer = queue.Queue()
         self.text_buffer = queue.Queue()
         self.pyaudio_instance = pyaudio.PyAudio()
@@ -88,8 +89,3 @@ class XttsEngine:
         # Clean up the audio stream
         self.stream.stop_stream()
         self.stream.close()
-
-
-if __name__ == '__main__':
-    synthesizer = XttsEngine()
-    #synthesizer.synthesize_audio("This is a test. Hello")

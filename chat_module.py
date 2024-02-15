@@ -1,13 +1,7 @@
-import logging
-logger = logging.getLogger()
-logger.disabled = True
 import asyncio
 from openai import AsyncOpenAI
 from nltk.tokenize import sent_tokenize
 import json
-import requests
-import httpx
-from xtts_module import XttsEngine
 
 class OpenAIEngine:
     
@@ -41,24 +35,4 @@ class OpenAIEngine:
             if chunk == "" and len(sentences) > 1:
                 yield sentences[-1]
             if chunk == "" and len(sentences) == 1:
-                yield sentences[1]
-
-async def main():
-    chatbot = OpenAIEngine(model="gpt-4")
-    tts_reader = XttsEngine()
-    try:
-        while True:
-            user_input = input("User: ")
-            chatbot.add_user_message(user_input)
-            print("AI: ", end="", flush=True)
-            async for donk in chatbot.sentence_generator():
-                tts_reader.add_text_for_synthesis(donk)
-                print(donk, end=" ", flush=True)
-            print("")
-    except KeyboardInterrupt:
-        tts_reader.stop()
-        print("exiting...")
-    
-
-if __name__ == '__main__':
-    asyncio.run(main())
+                yield sentences[-1]
