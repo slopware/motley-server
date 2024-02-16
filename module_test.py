@@ -1,10 +1,10 @@
 import asyncio
 
-from xtts_module import XttsEngine
-from chat_module import OpenAIEngine
+from xtts_engine import XttsEngine
+from chat_engine import OpenAIInterface
 
 async def main():
-    chatbot = OpenAIEngine(model="gpt-4")
+    chatbot = OpenAIInterface()
     tts_reader = XttsEngine()
     try:
         while True:

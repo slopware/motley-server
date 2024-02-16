@@ -3,13 +3,14 @@ from openai import AsyncOpenAI
 from nltk.tokenize import sent_tokenize
 import json
 
-class OpenAIEngine:
+class OpenAIInterface:
     
     def __init__(self, system_base="You are a terse and sarcastic assistant.", model="gpt-4-1106-preview"):
         self.client = AsyncOpenAI()
         self.model = model
         self.messages = [{"role": "system", "content": system_base}]
         self.current_response = ""
+    
     def add_user_message(self, content):
         self.messages.append({"role": "user", "content": content})
 
