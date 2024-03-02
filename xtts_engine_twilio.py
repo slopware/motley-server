@@ -6,8 +6,10 @@ import torchaudio
 import queue
 import pyaudio
 import threading
-
 import numpy as np
+import subprocess
+import base64
+
 
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
@@ -22,32 +24,27 @@ class XttsEngine:
         self.model.load_checkpoint(self.config, checkpoint_dir="xtts_models/v2.0.2/", use_deepspeed=True, eval=True)
         self.model.cuda()
         self.gpt_cond_latent, self.speaker_embedding = self.model.get_conditioning_latents(audio_path=["isa_denoised.wav"])
+        print(f"sample rate: {self.config.audio.output_sample_rate}")
+        self.resampler = torchaudio.transforms.Resample(orig_freq=24000, new_freq=8000)
+        self.mu_law_encoder = torchaudio.transforms.MuLawEncoding(quantization_channels=246)
         self.audio_buffer = queue.Queue()
         self.text_buffer = queue.Queue()
-        self.pyaudio_instance = pyaudio.PyAudio()
-        self.stream = self.pyaudio_instance.open(format=pyaudio.paFloat32,
-                             channels=1,
-                             rate=self.config.audio.output_sample_rate,
-                             output=True)
-        # Thread management
+
         self.synthesis_thread = threading.Thread(target=self.synthesize, daemon=True)
-        self.playback_thread = threading.Thread(target=self.play_audio, daemon=True)
+        #self.send_thread = threading.Thread(target=self.send_audio, daemon=True)
         
         # Start threads
         self.synthesis_thread.start()
-        self.playback_thread.start()
+        #self.send_thread.start()
 
+    def postprocess_and_encode(self, chunk):
+        chunk_cpu = chunk.to('cpu')
+        resampled_audio = self.resampler(chunk_cpu)
+        mulaw_encoded_audio = self.mu_law_encoder(resampled_audio)
+        audio_bytes = mulaw_encoded_audio.numpy().astype(np.uint8).tobytes()
+        base64_encoded_audio = base64.b64encode(audio_bytes).decode('utf-8')
+        return base64_encoded_audio
 
-    def postprocess_wave(self, chunk):
-        """Post process the output waveform"""
-        if isinstance(chunk, list):
-            chunk = torch.cat(chunk, dim=0)
-        chunk = chunk.clone().detach().cpu().numpy()
-        chunk = chunk[None, : int(chunk.shape[0])]
-        chunk = np.clip(chunk, -1, 1)
-        chunk = chunk.astype(np.float32)
-        return chunk
-    
     def synthesize(self):
         while True:
             text = self.text_buffer.get()
@@ -61,21 +58,24 @@ class XttsEngine:
                 self.speaker_embedding
             )
             for i, chunk in enumerate(chunks):
-                # if i == 0:
-                #     print(f"Time to first chunk: {time.time() - t0}")
-                # print(f"Received chunk {i} of audio length {chunk.shape[-1]}")
-                chunk = self.postprocess_wave(chunk)
+                chunk = self.postprocess_and_encode(chunk)
                 self.audio_buffer.put(chunk)
+                print(chunk)
             self.text_buffer.task_done()
 
-    def play_audio(self):
+    def send_chunks(self):
         while True:
             chunk = self.audio_buffer.get()
             if chunk is None:
                 break
-            self.stream.write(chunk.tobytes(), exception_on_underflow=False)
             self.audio_buffer.task_done()
+            return chunk
     
+    def get_chunk(self):
+        chunk = self.audio_buffer.get()
+        self.audio_buffer.task_done()
+        return chunk
+
     def add_text_for_synthesis(self, text):
         self.text_buffer.put(text)
 
@@ -85,7 +85,19 @@ class XttsEngine:
         self.audio_buffer.put(None)
         # Wait for threads to finish
         self.synthesis_thread.join()
-        self.playback_thread.join()
+        #self.playback_thread.join()
         # Clean up the audio stream
         self.stream.stop_stream()
         self.stream.close()
+
+if __name__ == "__main__":
+    import asyncio
+    tts_reader = XttsEngine()
+    try:
+        while True:
+            user_input = input("User: ")
+            tts_reader.add_text_for_synthesis(user_input)
+    except KeyboardInterrupt:
+        tts_reader.stop()
+        print("exiting...")
+    
