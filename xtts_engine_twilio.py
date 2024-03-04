@@ -2,14 +2,16 @@ import os
 import sys
 import time
 import torch
-import torchaudio
 import queue
-import pyaudio
 import threading
-import numpy as np
-import subprocess
 import base64
-
+import torchaudio
+import torchaudio.transforms as T
+import numpy as np
+import audioop
+from fastapi import WebSocket
+import asyncio
+import json
 
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
@@ -21,30 +23,42 @@ class XttsEngine:
         #self.config = load_config("xtts_models/v2.0.2/config.json")
         self.config.load_json("xtts_models/v2.0.2/config.json")
         self.model = Xtts.init_from_config(self.config)
+
         self.model.load_checkpoint(self.config, checkpoint_dir="xtts_models/v2.0.2/", use_deepspeed=True, eval=True)
+
         self.model.cuda()
-        self.gpt_cond_latent, self.speaker_embedding = self.model.get_conditioning_latents(audio_path=["isa_denoised.wav"])
-        print(f"sample rate: {self.config.audio.output_sample_rate}")
-        self.resampler = torchaudio.transforms.Resample(orig_freq=24000, new_freq=8000)
-        self.mu_law_encoder = torchaudio.transforms.MuLawEncoding(quantization_channels=246)
+
+        self.gpt_cond_latent, self.speaker_embedding = self.model.get_conditioning_latents(audio_path=["speakers/isa_denoised.wav"])
+        #self.config.audio.output_sample_rate = 8000
+        print(f"sample rate: {self.config.audio.output_sample_rate}") #24000
+        self.resampler = T.Resample(orig_freq=24000, new_freq=8000)
+        self.mulaw_encoder = T.MuLawEncoding(quantization_channels=256)
+
         self.audio_buffer = queue.Queue()
         self.text_buffer = queue.Queue()
 
+        self.websocket = None
+        self.sid = None
+
         self.synthesis_thread = threading.Thread(target=self.synthesize, daemon=True)
-        #self.send_thread = threading.Thread(target=self.send_audio, daemon=True)
         
-        # Start threads
         self.synthesis_thread.start()
-        #self.send_thread.start()
 
-    def postprocess_and_encode(self, chunk):
-        chunk_cpu = chunk.to('cpu')
-        resampled_audio = self.resampler(chunk_cpu)
-        mulaw_encoded_audio = self.mu_law_encoder(resampled_audio)
-        audio_bytes = mulaw_encoded_audio.numpy().astype(np.uint8).tobytes()
-        base64_encoded_audio = base64.b64encode(audio_bytes).decode('utf-8')
-        return base64_encoded_audio
+    def postprocess_chunk(self, chunk):
+        """Post process the output waveform, converting to mulaw format before finally encoding in base64."""
+        if isinstance(chunk, list):
+            chunk = torch.cat(chunk, dim=0)
+        chunk = chunk.detach().cpu()
+        chunk = torch.clamp(chunk, min=-1, max=1)
+        if chunk.ndim == 1:
+            chunk = chunk.unsqueeze(0)
+        chunk = self.resampler(chunk)
 
+        pcm_array = np.int16(chunk*32768).tobytes()
+        mulaw_array = audioop.lin2ulaw(pcm_array, 2)
+        base64_encoded_chunk = base64.b64encode(mulaw_array).decode('utf-8')
+        return base64_encoded_chunk
+    
     def synthesize(self):
         while True:
             text = self.text_buffer.get()
@@ -58,37 +72,20 @@ class XttsEngine:
                 self.speaker_embedding
             )
             for i, chunk in enumerate(chunks):
-                chunk = self.postprocess_and_encode(chunk)
+                print(f"Received chunk {i} of audio length {chunk.shape[-1]}")
+                chunk = self.postprocess_chunk(chunk)
                 self.audio_buffer.put(chunk)
-                print(chunk)
             self.text_buffer.task_done()
 
-    def send_chunks(self):
-        while True:
-            chunk = self.audio_buffer.get()
-            if chunk is None:
-                break
-            self.audio_buffer.task_done()
-            return chunk
-    
-    def get_chunk(self):
-        chunk = self.audio_buffer.get()
-        self.audio_buffer.task_done()
-        return chunk
 
     def add_text_for_synthesis(self, text):
         self.text_buffer.put(text)
-
+            
     def stop(self):
-        # Signal to stop processing and playback
         self.text_buffer.put(None)
         self.audio_buffer.put(None)
-        # Wait for threads to finish
+
         self.synthesis_thread.join()
-        #self.playback_thread.join()
-        # Clean up the audio stream
-        self.stream.stop_stream()
-        self.stream.close()
 
 if __name__ == "__main__":
     import asyncio
