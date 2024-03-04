@@ -11,10 +11,11 @@ import torchaudio.transforms as T
 import numpy as np
 from xtts_engine_twilio import XttsEngine
 from chat_engine import OpenAIInterface
-from speech_engine import process_speech_chunk
+from voice_engine import VoiceRecognitionEngine
+
 import queue
 app = FastAPI()
-
+voice = VoiceRecognitionEngine()
 tts_reader = XttsEngine()
 chatbot = OpenAIInterface(system_base="""
 You are a WIP VOIP conversation AI designed to talk to someone on a cell phone.
@@ -69,12 +70,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 if message.get("media").get("track") == "inbound":
                     payload = message.get("media").get("payload")
-                    await process_speech_chunk(payload)
+                    await asyncio.to_thread(voice.process_speech_chunk, payload)
                 if message.get("media").get("track") == "outbound":
                     print("Outbound message received")
                 await send_audio(websocket, streamSid)
             elif message.get("event") == "stop":
                 print("Stream stopped.")
+                await voice.stop()
                 # tts_reader.stop()
             elif message.get("event") == "mark":
                 print("mark message received.")
