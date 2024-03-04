@@ -41,7 +41,6 @@ class XttsEngine:
         self.sid = None
 
         self.synthesis_thread = threading.Thread(target=self.synthesize, daemon=True)
-        
         self.synthesis_thread.start()
 
     def postprocess_chunk(self, chunk):
@@ -84,9 +83,18 @@ class XttsEngine:
     def stop(self):
         self.text_buffer.put(None)
         self.audio_buffer.put(None)
-
         self.synthesis_thread.join()
 
+    def reset(self):
+          # Clear queues without putting None, prepare for new data
+        while not self.text_buffer.empty():
+            self.text_buffer.get_nowait()
+        while not self.audio_buffer.empty():
+            self.audio_buffer.get_nowait()
+        if not self.synthesis_thread.is_alive():
+            self.synthesis_thread = threading.Thread(target=self.synthesize, daemon=True)
+            self.synthesis_thread.start()
+    
 if __name__ == "__main__":
     import asyncio
     tts_reader = XttsEngine()

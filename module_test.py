@@ -3,6 +3,9 @@ import asyncio
 from xtts_engine import XttsEngine
 from chat_engine import OpenAIInterface
 
+from faster_whisper import WhisperModel
+model_size = "large-v3"
+
 async def main():
     chatbot = OpenAIInterface()
     tts_reader = XttsEngine()
