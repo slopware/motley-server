@@ -71,7 +71,7 @@ class XttsEngine:
                 self.speaker_embedding
             )
             for i, chunk in enumerate(chunks):
-                print(f"Received chunk {i} of audio length {chunk.shape[-1]}")
+                #print(f"Received chunk {i} of audio length {chunk.shape[-1]}")
                 chunk = self.postprocess_chunk(chunk)
                 self.audio_buffer.put(chunk)
             self.text_buffer.task_done()

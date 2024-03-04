@@ -70,7 +70,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 if message.get("media").get("track") == "inbound":
                     payload = message.get("media").get("payload")
-                    await asyncio.to_thread(voice.process_speech_chunk, payload)
+                    await voice.process_speech_chunk(payload)
                 if message.get("media").get("track") == "outbound":
                     print("Outbound message received")
                 await send_audio(websocket, streamSid)
