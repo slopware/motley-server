@@ -11,7 +11,7 @@ import torchaudio.transforms as T
 import numpy as np
 from xtts_engine_twilio import XttsEngine
 from chat_engine import OpenAIInterface
-
+from vad_engine import process_speech_chunk
 import queue
 app = FastAPI()
 
@@ -64,13 +64,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 if message.get("sequenceNumber") == "2":
                     print("First media message received.")
                     chatbot.add_user_message(f"user has connected")
-                    print("AI: ", end="", flush=True)
                     async for donk in chatbot.sentence_generator():
                         await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
-                        print(donk, end=" ", flush=True)
-                print("")
+
                 if message.get("media").get("track") == "inbound":
-                    None
+                    payload = message.get("media").get("payload")
+                    await process_speech_chunk(payload)
                 if message.get("media").get("track") == "outbound":
                     print("Outbound message received")
                 await send_audio(websocket, streamSid)
@@ -85,11 +84,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 print(f"DTMF message received. Digit pressed: {message.get('dtmf').get('digit')}")
                 # await asyncio.to_thread(tts_reader.add_text_for_synthesis, f"you have pressed {message.get('dtmf').get('digit')}")
                 chatbot.add_user_message(f"user has pressed {message.get('dtmf').get('digit')}")
-                print("AI: ", end="", flush=True)
+                #print("AI: ", end="", flush=True)
                 async for donk in chatbot.sentence_generator():
                     await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
-                    print(donk, end=" ", flush=True)
-                print("")
+                    #print(donk, end=" ", flush=True)
+                #print("")
                 #await send_audio(websocket, streamSid)
     except KeyboardInterrupt:
         print("exiting...")
