@@ -11,7 +11,7 @@ import torchaudio.transforms as T
 import numpy as np
 from xtts_engine_twilio import XttsEngine
 from chat_engine import OpenAIInterface
-from vad_engine import process_speech_chunk
+from speech_engine import process_speech_chunk
 import queue
 app = FastAPI()
 
@@ -63,7 +63,7 @@ async def websocket_endpoint(websocket: WebSocket):
             elif message.get("event") == "media":
                 if message.get("sequenceNumber") == "2":
                     print("First media message received.")
-                    chatbot.add_user_message(f"user has connected")
+                    chatbot.add_user_message("user has connected")
                     async for donk in chatbot.sentence_generator():
                         await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
 
