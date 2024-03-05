@@ -19,7 +19,7 @@ voice = VoiceRecognitionEngine()
 tts_reader = XttsEngine()
 chatbot = OpenAIInterface(system_base="""
 You are a WIP VOIP conversation AI designed to talk to someone on a cell phone.
-Currently that someone is the programmer as this is the testing phase. User speech has not yet been implemented but you may receive messages like 'user has pressed the pound key' or 'user has pressed 1' if you want you can make jokes about it. good luck. be terse and sarcastic.
+Currently that someone is the programmer as this is the testing phase. User speech has just been implemented but you may receive messages like 'user has pressed the pound key' or 'user has pressed 1' if you want you can make jokes about it. good luck. be terse and sarcastic.
 """)
 
 async def send_audio(websocket: WebSocket, streamSid):
@@ -44,9 +44,23 @@ async def send_audio(websocket: WebSocket, streamSid):
         except queue.Empty:
             return
 
+async def get_transcription():
+    try:
+        text = await asyncio.to_thread(voice.text_queue.get_nowait)
+        if text is None:
+            return
+        else:
+            print(text)
+            chatbot.add_user_message(text)
+            async for donk in chatbot.sentence_generator():
+                await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
+    except queue.Empty:
+        return
+
 @app.websocket("/socket")
 async def websocket_endpoint(websocket: WebSocket):
     await asyncio.to_thread(tts_reader.reset)
+    await asyncio.to_thread(voice.reset)
     await websocket.accept()
 
     try:
@@ -70,28 +84,21 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 if message.get("media").get("track") == "inbound":
                     payload = message.get("media").get("payload")
-                    await voice.process_speech_chunk(payload)
+                    await asyncio.to_thread(voice.process_speech_chunk, payload)
                 if message.get("media").get("track") == "outbound":
                     print("Outbound message received")
                 await send_audio(websocket, streamSid)
+                await get_transcription()
             elif message.get("event") == "stop":
                 print("Stream stopped.")
-                await voice.stop()
-                # tts_reader.stop()
+                voice.stop()
             elif message.get("event") == "mark":
-                print("mark message received.")
+                pass
             elif message.get("event") == "dtmf":
-                # tts_reader.add_text_for_synthesis("you have connected. this is a successful test.")
-                #A DTMF message will be sent when someone presses a touch-tone number key (such as the "1" key in the example message below) in the inbound stream, typically in response to a prompt in the outbound stream.
-                print(f"DTMF message received. Digit pressed: {message.get('dtmf').get('digit')}")
-                # await asyncio.to_thread(tts_reader.add_text_for_synthesis, f"you have pressed {message.get('dtmf').get('digit')}")
                 chatbot.add_user_message(f"user has pressed {message.get('dtmf').get('digit')}")
-                #print("AI: ", end="", flush=True)
                 async for donk in chatbot.sentence_generator():
                     await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
-                    #print(donk, end=" ", flush=True)
-                #print("")
-                #await send_audio(websocket, streamSid)
+
     except KeyboardInterrupt:
         print("exiting...")
     except WebSocketDisconnect:
