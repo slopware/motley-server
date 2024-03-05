@@ -26,6 +26,7 @@ class AnthropicInterface():
                 yield text
                 #print(text, end="", flush=True)
             #print()
+            yield None
             self.messages.append({"role": "assistant", "content": self.current_response})
         
         #message = await stream.get_final_message()
@@ -38,9 +39,9 @@ class AnthropicInterface():
             if len(sentences) > 1 and sentences[-2] not in printed_sentences:
                 printed_sentences.append(sentences[-2])
                 yield sentences[-2]
-            if chunk == "" and len(sentences) > 1:
+            if chunk == None and len(sentences) > 1:
                 yield sentences[-1]
-            if chunk == "" and len(sentences) == 1:
+            if chunk == None and len(sentences) == 1:
                 yield sentences[-1]
 
 if __name__ == "__main__":
@@ -48,6 +49,8 @@ if __name__ == "__main__":
         chatbot = AnthropicInterface()
         chatbot.add_user_message("Hello!")
         #await chatbot.stream_generator()
+        # async for sentence in chatbot.sentence_generator():
+        #     print(f"sentence: {sentence}", end=" ", flush=True)
         async for sentence in chatbot.sentence_generator():
             print(sentence, end=" ", flush=True)
     
