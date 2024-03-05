@@ -2,12 +2,11 @@ import asyncio
 
 from xtts_engine import XttsEngine
 from chat_engine import OpenAIInterface
-
-from faster_whisper import WhisperModel
-model_size = "large-v3"
+from anthropic_interface import AnthropicInterface
+#
 
 async def main():
-    chatbot = OpenAIInterface()
+    chatbot = AnthropicInterface()
     tts_reader = XttsEngine()
     try:
         while True:

@@ -166,3 +166,4 @@ models/
 xtts_models/
 test/
 speakers/
+instructions.txt

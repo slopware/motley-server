@@ -17,10 +17,11 @@ import queue
 app = FastAPI()
 voice = VoiceRecognitionEngine()
 tts_reader = XttsEngine()
-chatbot = OpenAIInterface(system_base="""
-You are a WIP VOIP conversation AI designed to talk to someone on a cell phone.
-Currently that someone is the programmer as this is the testing phase. User speech has just been implemented but you may receive messages like 'user has pressed the pound key' or 'user has pressed 1' if you want you can make jokes about it. good luck. be terse and sarcastic.
-""")
+
+with open('instructions.txt', encoding='utf-8') as f:
+    system_instructions = f.read()
+
+chatbot = OpenAIInterface(system_base=system_instructions)
 
 async def send_audio(websocket: WebSocket, streamSid):
         try:
@@ -51,6 +52,7 @@ async def get_transcription():
             return
         else:
             print(text)
+            await asyncio.to_thread(tts_reader.reset)
             chatbot.add_user_message(text)
             async for donk in chatbot.sentence_generator():
                 await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
@@ -68,8 +70,6 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             message = json.loads(data)
             streamSid = message.get("streamSid")
-
-            
 
             if message.get("event") == "connected":
                 print(f"Connected to protocol: {message.get('protocol')}")
