@@ -1,7 +1,7 @@
 import asyncio
 
 from xtts_engine import XttsEngine
-from chat_engine import OpenAIInterface
+from openai_interface import OpenAIInterface
 from anthropic_interface import AnthropicInterface
 #
 

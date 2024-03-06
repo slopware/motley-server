@@ -10,7 +10,7 @@ import queue
 from faster_whisper import WhisperModel
 
 class VoiceRecognitionEngine:
-    def __init__(self, default_model_size="large-v3"):
+    def __init__(self, default_model_size="medium"):
         self.model_size = default_model_size
         self.model = WhisperModel(self.model_size, device="cuda", compute_type="float16")
         self.audio_buffer = io.BytesIO()
@@ -65,7 +65,8 @@ class VoiceRecognitionEngine:
             if chunk == 'END':
                 audio_data = self.audio_buffer.getvalue()
                 self.audio_buffer = io.BytesIO()
-                self.chunk_queue.empty()
+                #self.stream.write(audio_data)
+                #self.chunk_queue.empty()
                 audio_array = np.frombuffer(audio_data, dtype=np.int16)
                 audio_float32 = audio_array.astype(np.float32) / 32768.0
                 segments, info = self.model.transcribe(audio_float32, vad_filter=True, beam_size=5, language="en")
@@ -73,7 +74,10 @@ class VoiceRecognitionEngine:
                 for segment in segments:
                     #print(segment.text)
                     self.text_queue.put(segment.text)
+                while not self.chunk_queue.empty():
+                    self.chunk_queue.get_nowait()
             self.chunk_queue.task_done()
+
 
     def stop(self):
         # Stop and close the PyAudio stream

@@ -18,6 +18,7 @@ class AnthropicInterface():
         self.current_response = ""
         async with self.client.messages.stream(
             max_tokens=1024,
+            system=self.system,
             messages=self.messages,
             model=self.model
         ) as stream:

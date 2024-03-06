@@ -5,10 +5,10 @@ import json
 
 class OpenAIInterface:
     
-    def __init__(self, system_base="You are a terse and sarcastic assistant.", model="gpt-4-1106-preview"):
+    def __init__(self, default_system="You are a terse and sarcastic assistant.", model="gpt-4-1106-preview"):
         self.client = AsyncOpenAI()
         self.model = model
-        self.messages = [{"role": "system", "content": system_base}]
+        self.messages = [{"role": "system", "content": default_system}]
         self.current_response = ""
     
     def add_user_message(self, content):
@@ -21,6 +21,7 @@ class OpenAIInterface:
             messages = self.messages,
             stream = True
         )
+        print('calling api...')
         async for chunk in stream:
             self.current_response += chunk.choices[0].delta.content or ""
             yield chunk.choices[0].delta.content or ""

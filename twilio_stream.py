@@ -10,7 +10,8 @@ import torchaudio
 import torchaudio.transforms as T
 import numpy as np
 from xtts_engine_twilio import XttsEngine
-from chat_engine import OpenAIInterface
+from openai_interface import OpenAIInterface
+from anthropic_interface import AnthropicInterface
 from voice_engine import VoiceRecognitionEngine
 
 import queue
@@ -21,7 +22,7 @@ tts_reader = XttsEngine()
 with open('instructions.txt', encoding='utf-8') as f:
     system_instructions = f.read()
 
-chatbot = OpenAIInterface(system_base=system_instructions)
+chatbot = OpenAIInterface(default_system=system_instructions)
 
 async def send_audio(websocket: WebSocket, streamSid):
         try:
@@ -52,10 +53,12 @@ async def get_transcription():
             return
         else:
             print(text)
-            await asyncio.to_thread(tts_reader.reset)
+            tts_reader.stop()
+            tts_reader.reset()
             chatbot.add_user_message(text)
             async for donk in chatbot.sentence_generator():
-                await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
+                if not tts_reader.stop_signal.is_set():
+                    await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
     except queue.Empty:
         return
 

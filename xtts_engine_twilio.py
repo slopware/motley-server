@@ -37,8 +37,7 @@ class XttsEngine:
         self.audio_buffer = queue.Queue()
         self.text_buffer = queue.Queue()
 
-        self.websocket = None
-        self.sid = None
+        self.stop_signal = threading.Event()
 
         self.synthesis_thread = threading.Thread(target=self.synthesize, daemon=True)
         self.synthesis_thread.start()
@@ -62,6 +61,10 @@ class XttsEngine:
         while True:
             text = self.text_buffer.get()
             if text is None:
+                #self.synthesis_thread.join()
+                print('tts thread breaking')
+                break
+            if self.stop_signal.is_set():
                 break
             t0 = time.time()
             chunks = self.model.inference_stream(
@@ -78,19 +81,31 @@ class XttsEngine:
 
 
     def add_text_for_synthesis(self, text):
+        print (f'adding text for synthesis: {text}')
         self.text_buffer.put(text)
             
     def stop(self):
+        print('stopping tts...')
+        self.stop_signal.set()
         self.text_buffer.put(None)
         self.audio_buffer.put(None)
-        self.synthesis_thread.join()
+        if self.synthesis_thread.is_alive():
+            self.synthesis_thread.join()
 
     def reset(self):
           # Clear queues without putting None, prepare for new data
+        print('resetting tts...')
+        self.stop_signal.clear()
         while not self.text_buffer.empty():
-            self.text_buffer.get_nowait()
+            try:
+                self.text_buffer.get_nowait()
+            except queue.Empty:
+                pass
         while not self.audio_buffer.empty():
-            self.audio_buffer.get_nowait()
+            try:
+                self.audio_buffer.get_nowait()
+            except queue.Empty:
+                pass
         if not self.synthesis_thread.is_alive():
             self.synthesis_thread = threading.Thread(target=self.synthesize, daemon=True)
             self.synthesis_thread.start()
