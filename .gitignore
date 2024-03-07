@@ -164,6 +164,6 @@ old/
 test_output/
 models/
 xtts_models/
-test/
+misc/
 speakers/
 instructions.txt

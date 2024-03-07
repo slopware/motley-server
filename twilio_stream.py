@@ -13,11 +13,14 @@ from xtts_engine_twilio import XttsEngine
 from openai_interface import OpenAIInterface
 from anthropic_interface import AnthropicInterface
 from voice_engine import VoiceRecognitionEngine
-
+from typing import Set
+from asyncio import Task
 import queue
 app = FastAPI()
 voice = VoiceRecognitionEngine()
 tts_reader = XttsEngine()
+
+running_tasks: Set[Task] = set()
 
 with open('instructions.txt', encoding='utf-8') as f:
     system_instructions = f.read()
@@ -26,7 +29,6 @@ chatbot = OpenAIInterface(default_system=system_instructions)
 
 async def send_audio(websocket: WebSocket, streamSid):
         try:
-
             chunk = await asyncio.to_thread(tts_reader.audio_buffer.get_nowait)
             if chunk is None:
                 #print('nada')
@@ -46,19 +48,32 @@ async def send_audio(websocket: WebSocket, streamSid):
         except queue.Empty:
             return
 
+async def process_sentences():
+    async for donk in chatbot.sentence_generator():
+        await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
+
 async def get_transcription():
     try:
-        text = await asyncio.to_thread(voice.text_queue.get_nowait)
+        text = voice.text_queue.get_nowait()
         if text is None:
             return
         else:
             print(text)
-            tts_reader.stop()
+            tts_reader.halt()
             tts_reader.reset()
-            chatbot.add_user_message(text)
-            async for donk in chatbot.sentence_generator():
-                if not tts_reader.stop_signal.is_set():
-                    await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
+            chatbot.add_user_message(f"Detected user speech: {text}")
+             # Cancel previous tasks
+            for task in running_tasks:
+                task.cancel()
+            running_tasks.clear()
+            
+            # Create a new task and add it to the running tasks set
+            task = asyncio.create_task(process_sentences())
+            running_tasks.add(task)
+            
+            # Remove the task from the running tasks set when it completes
+            task.add_done_callback(lambda t: running_tasks.discard(t))
+
     except queue.Empty:
         return
 
@@ -76,7 +91,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if message.get("event") == "connected":
                 print(f"Connected to protocol: {message.get('protocol')}")
-            elif message.get("event") == "start":
+            elif message.get("event") == "start": 
                 print(f"Starting stream {message.get('start').get('streamSid')} {message.get('sequenceNumber')}")
             elif message.get("event") == "media":
                 if message.get("sequenceNumber") == "2":
@@ -95,6 +110,7 @@ async def websocket_endpoint(websocket: WebSocket):
             elif message.get("event") == "stop":
                 print("Stream stopped.")
                 voice.stop()
+                tts_reader.stop()
             elif message.get("event") == "mark":
                 pass
             elif message.get("event") == "dtmf":

@@ -58,7 +58,7 @@ class XttsEngine:
         return base64_encoded_chunk
     
     def synthesize(self):
-        while True:
+        while not self.stop_signal.is_set():
             text = self.text_buffer.get()
             if text is None:
                 #self.synthesis_thread.join()
@@ -89,9 +89,16 @@ class XttsEngine:
         self.stop_signal.set()
         self.text_buffer.put(None)
         self.audio_buffer.put(None)
+        # if self.synthesis_thread.is_alive():
+        #     self.synthesis_thread.join()
+
+    def halt(self):
+        print('halting tts...')
+        self.stop_signal.set()
+        self.text_buffer.put(None)
+        self.audio_buffer.put(None)
         if self.synthesis_thread.is_alive():
             self.synthesis_thread.join()
-
     def reset(self):
           # Clear queues without putting None, prepare for new data
         print('resetting tts...')
