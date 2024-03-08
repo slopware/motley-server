@@ -54,7 +54,7 @@ async def process_sentences():
     async for donk in chatbot.sentence_generator():
         await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
 
-async def get_transcription(audio_task):
+async def get_transcription(audio_task, websocket, streamSid):
     try:
         text = voice.text_queue.get_nowait()
         if text is None:
@@ -64,6 +64,7 @@ async def get_transcription(audio_task):
             tts_reader.halt()
             tts_reader.reset()
             chatbot.add_user_message(f"Detected user speech: {text}")
+            await websocket.send_json({"event": "clear", "streamSid": streamSid})
              # Cancel previous tasks
             for task in running_tasks:
                 task.cancel()
@@ -113,6 +114,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await asyncio.to_thread(voice.stop)
                 await asyncio.to_thread(tts_reader.stop)
                 for task in running_tasks:
+                    print(f'cancelling task {task}')
                     task.cancel()
             elif message.get("event") == "mark":
                 pass
@@ -122,7 +124,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
             audio_task = asyncio.create_task(send_audio(websocket, streamSid))
             running_tasks.add(audio_task)
-            await get_transcription(audio_task)
+            audio_task.add_done_callback(lambda t: running_tasks.discard(t))
+            await get_transcription(audio_task, websocket, streamSid)
+        for task in running_tasks:
+            print(f'cancelling task {task}')
+            task.cancel()
     except KeyboardInterrupt:
         print("exiting...")
     except WebSocketDisconnect:

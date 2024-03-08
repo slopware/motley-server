@@ -13,7 +13,7 @@ class VoiceRecognitionEngine:
     def __init__(self, default_model_size="large-v3"):
         self.model_size = default_model_size
         self.model = WhisperModel(self.model_size, device="cuda", compute_type="float16")
-        self.audio_buffer = io.BytesIO()
+        self.audio_buffer = []
         self.speech_frames_count = 0
         self.silence_frames_count = 0
         self.silent = True
@@ -38,7 +38,7 @@ class VoiceRecognitionEngine:
         # Convert µ-law audio to PCM format
         pcm_data = audioop.ulaw2lin(audio_bytes, 2)
 
-        vad = webrtcvad.Vad(1)
+        vad = webrtcvad.Vad(0)
         is_speech = vad.is_speech(pcm_data, 8000)
         self.chunk_queue.put(pcm_data)
         if is_speech:
@@ -61,15 +61,18 @@ class VoiceRecognitionEngine:
             if chunk is None:
                 break
             if chunk != 'END':
-                self.audio_buffer.write(chunk)
+                self.audio_buffer.append(chunk)
             if chunk == 'END':
-                audio_data = self.audio_buffer.getvalue()
-                self.audio_buffer = io.BytesIO()
+                combined_pcm_data = b''.join(self.audio_buffer)
+                self.audio_buffer = []
+                audio_float32 = np.frombuffer(combined_pcm_data, dtype=np.int16).astype(np.float32) / 32768
+                resampled_audio = librosa.resample(audio_float32, orig_sr=8000, target_sr=16000)
+                #resampled_pcm_data = (resampled_audio * 32768).astype(np.int16)
                 #self.stream.write(audio_data)
                 #self.chunk_queue.empty()
-                audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                audio_float32 = audio_array.astype(np.float32) / 32768.0
-                segments, info = self.model.transcribe(audio_float32, vad_filter=True, beam_size=5, language="en")
+                #audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                #audio_float32 = audio_array.astype(np.float32) / 32768.0
+                segments, info = self.model.transcribe(resampled_audio, vad_filter=True, beam_size=5, language="en")
                 #segments = list(segments)
                 for segment in segments:
                     #print(segment.text)
