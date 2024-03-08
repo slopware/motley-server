@@ -10,7 +10,7 @@ import queue
 from faster_whisper import WhisperModel
 
 class VoiceRecognitionEngine:
-    def __init__(self, default_model_size="medium"):
+    def __init__(self, default_model_size="large-v3"):
         self.model_size = default_model_size
         self.model = WhisperModel(self.model_size, device="cuda", compute_type="float16")
         self.audio_buffer = io.BytesIO()

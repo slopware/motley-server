@@ -27,6 +27,7 @@ with open('instructions.txt', encoding='utf-8') as f:
 
 chatbot = OpenAIInterface(default_system=system_instructions)
 
+
 async def send_audio(websocket: WebSocket, streamSid):
         try:
             chunk = await asyncio.to_thread(tts_reader.audio_buffer.get_nowait)
@@ -34,7 +35,8 @@ async def send_audio(websocket: WebSocket, streamSid):
                 #print('nada')
                 return
             else:
-                #print(f'chunk: {chunk}')
+                #dong = chunk.slice(5)
+                #print(f'sending audio chunk')
                 await websocket.send_json(
                     {"event": "media",
                     "streamSid": streamSid,
@@ -52,7 +54,7 @@ async def process_sentences():
     async for donk in chatbot.sentence_generator():
         await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
 
-async def get_transcription():
+async def get_transcription(audio_task):
     try:
         text = voice.text_queue.get_nowait()
         if text is None:
@@ -66,7 +68,7 @@ async def get_transcription():
             for task in running_tasks:
                 task.cancel()
             running_tasks.clear()
-            
+            audio_task.cancel()
             # Create a new task and add it to the running tasks set
             task = asyncio.create_task(process_sentences())
             running_tasks.add(task)
@@ -105,19 +107,22 @@ async def websocket_endpoint(websocket: WebSocket):
                     await asyncio.to_thread(voice.process_speech_chunk, payload)
                 if message.get("media").get("track") == "outbound":
                     print("Outbound message received")
-                await send_audio(websocket, streamSid)
-                await get_transcription()
+               
             elif message.get("event") == "stop":
                 print("Stream stopped.")
-                voice.stop()
-                tts_reader.stop()
+                await asyncio.to_thread(voice.stop)
+                await asyncio.to_thread(tts_reader.stop)
+                for task in running_tasks:
+                    task.cancel()
             elif message.get("event") == "mark":
                 pass
             elif message.get("event") == "dtmf":
                 chatbot.add_user_message(f"user has pressed {message.get('dtmf').get('digit')}")
                 async for donk in chatbot.sentence_generator():
                     await asyncio.to_thread(tts_reader.add_text_for_synthesis, donk)
-
+            audio_task = asyncio.create_task(send_audio(websocket, streamSid))
+            running_tasks.add(audio_task)
+            await get_transcription(audio_task)
     except KeyboardInterrupt:
         print("exiting...")
     except WebSocketDisconnect:
@@ -126,4 +131,5 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"An error occurred: {e}") 
     finally:
         print("connection handler exiting")
+        await asyncio.to_thread(voice.stop)
         await asyncio.to_thread(tts_reader.stop)

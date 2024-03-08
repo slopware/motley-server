@@ -28,7 +28,7 @@ class XttsEngine:
 
         self.model.cuda()
 
-        self.gpt_cond_latent, self.speaker_embedding = self.model.get_conditioning_latents(audio_path=["speakers/isa_denoised.wav"])
+        self.gpt_cond_latent, self.speaker_embedding = self.model.get_conditioning_latents(audio_path=["speakers/biden2.wav"])
         #self.config.audio.output_sample_rate = 8000
         print(f"sample rate: {self.config.audio.output_sample_rate}") #24000
         self.resampler = T.Resample(orig_freq=24000, new_freq=8000)
