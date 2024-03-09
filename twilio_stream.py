@@ -25,7 +25,7 @@ running_tasks: Set[Task] = set()
 with open('instructions.txt', encoding='utf-8') as f:
     system_instructions = f.read()
 
-chatbot = OpenAIInterface(default_system=system_instructions)
+chatbot = AnthropicInterface(default_system=system_instructions)
 
 
 async def send_audio(websocket: WebSocket, streamSid):
@@ -139,3 +139,8 @@ async def websocket_endpoint(websocket: WebSocket):
         print("connection handler exiting")
         await asyncio.to_thread(voice.stop)
         await asyncio.to_thread(tts_reader.stop)
+        print("clearing messages")
+        chatbot.messages = []
+        for task in running_tasks:
+            print(f'cancelling task {task}')
+            task.cancel()

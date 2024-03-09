@@ -38,7 +38,7 @@ class VoiceRecognitionEngine:
         # Convert µ-law audio to PCM format
         pcm_data = audioop.ulaw2lin(audio_bytes, 2)
 
-        vad = webrtcvad.Vad(0)
+        vad = webrtcvad.Vad(2)
         is_speech = vad.is_speech(pcm_data, 8000)
         self.chunk_queue.put(pcm_data)
         if is_speech:
@@ -46,7 +46,7 @@ class VoiceRecognitionEngine:
             self.silent = False
         else:
             self.silence_frames_count += 1
-            if self.silence_frames_count >= 5 and self.silent == False:
+            if self.silence_frames_count >= 8 and self.silent == False:
                 #print('...')
                 self.silence_frames_count = 0
                 self.silent = True

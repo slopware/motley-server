@@ -12,7 +12,12 @@ class AnthropicInterface():
         self.current_response = ""
 
     def add_user_message(self, content):
-        self.messages.append({"role": "user", "content": content})
+        if self.messages and self.messages[-1].get("role") == "user":
+            print('duplicate user role detected, qushing message')
+            old = self.messages[-1].get("content")
+            self.messages[-1]["content"] += f"\n{content}"
+        else:
+            self.messages.append({"role": "user", "content": content})
     
     async def stream_generator(self):
         self.current_response = ""
