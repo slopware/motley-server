@@ -2,6 +2,7 @@ import asyncio
 from anthropic import AsyncAnthropic
 from nltk.tokenize import sent_tokenize
 import json
+import re
 
 class AnthropicInterface():
     def __init__(self, model="claude-3-sonnet-20240229", default_system="You are a terse and sarcastic assistant."):
@@ -22,7 +23,7 @@ class AnthropicInterface():
     async def stream_generator(self):
         self.current_response = ""
         async with self.client.messages.stream(
-            max_tokens=1024,
+            max_tokens=150,
             system=self.system,
             messages=self.messages,
             model=self.model
@@ -33,8 +34,10 @@ class AnthropicInterface():
                 #print(text, end="", flush=True)
             #print()
             yield None
+            # Remove text within asterisks using regular expression
+            self.current_response = re.sub(r'\*.*?\*', '', self.current_response)
             self.messages.append({"role": "assistant", "content": self.current_response})
-        
+            print(f'{self.current_response}')
         #message = await stream.get_final_message()
         #print(message.model_dump_json(indent=2))
 
@@ -43,12 +46,15 @@ class AnthropicInterface():
         async for chunk in self.stream_generator():
             sentences = sent_tokenize(self.current_response)
             if len(sentences) > 1 and sentences[-2] not in printed_sentences:
+                cleaned_sentence = re.sub(r'\*.*?\*', '', sentences[-2])
                 printed_sentences.append(sentences[-2])
-                yield sentences[-2]
+                yield cleaned_sentence
             if chunk == None and len(sentences) > 1:
-                yield sentences[-1]
+                cleaned_sentence = re.sub(r'\*.*?\*', '', sentences[-1])
+                yield cleaned_sentence
             if chunk == None and len(sentences) == 1:
-                yield sentences[-1]
+                cleaned_sentence = re.sub(r'\*.*?\*', '', sentences[-1])
+                yield cleaned_sentence
 
 if __name__ == "__main__":
     async def main():
